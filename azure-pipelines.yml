@@ -1,0 +1,125 @@
+# This file defines the pipeline for CI/CD process.
+
+# The realized main tasks by the pipeline are:
+#   - Builds a Restfull Service.
+#   - Deploys at Openshift platform.
+
+trigger:
+- master
+- development
+- pre-production
+
+variables: 
+- template: variables.yml
+
+stages:
+  - stage: "Building"
+    displayName: "Building"
+    jobs:
+      - job: "Build"
+        displayName: "Build job"
+        pool:
+          vmImage: "ubuntu-latest"
+        steps:
+          - download: none
+          - template: build-tasks.yml
+
+  - stage: "Development_Deployment"
+    displayName: "Development Deployment"
+    dependsOn: "Building"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/development'))
+    jobs:
+    - deployment: Deploy
+      displayName: "Deploy job"
+      pool:
+        name: "Hosted Linux Build MicroServices"
+      environment: Development
+      variables:
+        - group: "openshift-clusterLoki-connection-variables"
+        - name: appHost
+          value: "servicios-dev.mercadopublico.cl"
+        - name: ocpNamespace
+          value: "servicios-registro-dev"
+        - name: fileProperties
+          value: keyvalue-dev.properties
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - download: none
+              - template: deploy-tasks.yml
+
+  - stage: "PreProduction_Deployment"
+    displayName: "PreProduction Deployment"
+    dependsOn: "Building"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/pre-production'))
+    jobs:
+    - deployment: Deploy
+      displayName: "Deploy job"
+      pool:
+        name: "Hosted Linux Build MicroServices"
+      environment: PreProduction
+      variables:
+        - group: "openshift-clusterLoki-connection-variables"
+        - name: appHost
+          value: "servicios-pre.mercadopublico.cl"
+        - name: ocpNamespace
+          value: "servicios-registro-pre"
+        - name: fileProperties
+          value: keyvalue-pre.properties 
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - download: none
+              - template: deploy-tasks.yml      
+
+  - stage: "Production_Deployment"
+    displayName: "Production Deployment"
+    dependsOn: "Building"
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
+    jobs:
+      - deployment: Deploy
+        displayName: "Deploy job"
+        pool:
+          name: "Hosted Linux Build MicroServices"
+        environment: Production
+        variables:
+          - group: "openshift-clusterThor-connection-variables"
+          - name: appHost
+            value: "servicios-prd.mercadopublico.cl"
+          - name: ocpNamespace
+            value: "servicios-registro-prd"
+          - name: fileProperties
+            value: keyvalue-pro.properties
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: none
+                - template: deploy-tasks.yml
+
+  - stage: 'Contingency_Deploying'
+    displayName: 'Deploying to Contingency'
+    dependsOn: 'Building'
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
+    jobs:
+    - deployment: Deploy
+      displayName: 'Deploying job'
+      pool:
+        name: 'Hosted Linux Build MicroServices'
+      environment: Contingency
+      variables:
+        - group: "openshift-clusterRagnarok-connection-variables"
+        - name: appHost
+          value: "servicios-prd.mercadopublico.cl"
+        - name: ocpNamespace
+          value: "servicios-registro-prd"
+        - name: fileProperties
+          value: keyvalue-pro.properties  
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - download: none
+              - template: deploy-tasks.yml
